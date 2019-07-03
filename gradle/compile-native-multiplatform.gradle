@@ -28,3 +28,6 @@ kotlin {
         }
     }
 }
+
+check.dependsOn getTasksByName("linkDebugFrameworkMacosX64", true)
+check.dependsOn getTasksByName("linkDebugFrameworkReleaseX64", true)
