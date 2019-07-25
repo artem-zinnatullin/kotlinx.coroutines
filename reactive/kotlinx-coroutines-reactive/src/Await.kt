@@ -23,7 +23,7 @@ import kotlin.coroutines.*
  *
  * @throws NoSuchElementException if publisher does not emit any value
  */
-public suspend fun <T> Publisher<T>.awaitFirst(): T = injectCoroutineContext().awaitOne(Mode.FIRST)
+public suspend fun <T> Publisher<T>.awaitFirst(): T = awaitOne(Mode.FIRST)
 
 /**
  * Awaits for the first value from the given observable or the [default] value if none is emitted without blocking a
@@ -33,8 +33,7 @@ public suspend fun <T> Publisher<T>.awaitFirst(): T = injectCoroutineContext().a
  * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
  * immediately resumes with [CancellationException].
  */
-public suspend fun <T> Publisher<T>.awaitFirstOrDefault(default: T): T =
-    injectCoroutineContext().awaitOne(Mode.FIRST_OR_DEFAULT, default)
+public suspend fun <T> Publisher<T>.awaitFirstOrDefault(default: T): T = awaitOne(Mode.FIRST_OR_DEFAULT, default)
 
 /**
  * Awaits for the first value from the given observable or `null` value if none is emitted without blocking a
@@ -44,7 +43,7 @@ public suspend fun <T> Publisher<T>.awaitFirstOrDefault(default: T): T =
  * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
  * immediately resumes with [CancellationException].
  */
-public suspend fun <T> Publisher<T>.awaitFirstOrNull(): T? = injectCoroutineContext().awaitOne(Mode.FIRST_OR_DEFAULT)
+public suspend fun <T> Publisher<T>.awaitFirstOrNull(): T? = awaitOne(Mode.FIRST_OR_DEFAULT)
 
 /**
  * Awaits for the first value from the given observable or call [defaultValue] to get a value if none is emitted without blocking a
@@ -54,8 +53,7 @@ public suspend fun <T> Publisher<T>.awaitFirstOrNull(): T? = injectCoroutineCont
  * If the [Job] of the current coroutine is cancelled or completed while this suspending function is waiting, this function
  * immediately resumes with [CancellationException].
  */
-public suspend fun <T> Publisher<T>.awaitFirstOrElse(defaultValue: () -> T): T =
-    injectCoroutineContext().awaitOne(Mode.FIRST_OR_DEFAULT) ?: defaultValue()
+public suspend fun <T> Publisher<T>.awaitFirstOrElse(defaultValue: () -> T): T? = awaitOne(Mode.FIRST_OR_DEFAULT) ?: defaultValue()
 
 /**
  * Awaits for the last value from the given publisher without blocking a thread and
@@ -67,7 +65,7 @@ public suspend fun <T> Publisher<T>.awaitFirstOrElse(defaultValue: () -> T): T =
  *
  * @throws NoSuchElementException if publisher does not emit any value
  */
-public suspend fun <T> Publisher<T>.awaitLast(): T = injectCoroutineContext().awaitOne(Mode.LAST)
+public suspend fun <T> Publisher<T>.awaitLast(): T = awaitOne(Mode.LAST)
 
 /**
  * Awaits for the single value from the given publisher without blocking a thread and
@@ -80,7 +78,7 @@ public suspend fun <T> Publisher<T>.awaitLast(): T = injectCoroutineContext().aw
  * @throws NoSuchElementException if publisher does not emit any value
  * @throws IllegalArgumentException if publisher emits more than one value
  */
-public suspend fun <T> Publisher<T>.awaitSingle(): T = injectCoroutineContext().awaitOne(Mode.SINGLE)
+public suspend fun <T> Publisher<T>.awaitSingle(): T = awaitOne(Mode.SINGLE)
 
 // ------------------------ private ------------------------
 
@@ -89,11 +87,8 @@ public suspend fun <T> Publisher<T>.awaitSingle(): T = injectCoroutineContext().
 private val contextInjectors: List<ContextInjector> =
     ServiceLoader.load(ContextInjector::class.java, ContextInjector::class.java.classLoader).toList()
 
-private suspend fun <T> Publisher<T>.injectCoroutineContext(): Publisher<T> {
-    return if (contextInjectors.isNotEmpty()) {
-        contextInjectors[0].injectCoroutineContext(this, coroutineContext)
-    } else this
-}
+private fun <T> Publisher<T>.injectCoroutineContext(coroutineContext: CoroutineContext) =
+    contextInjectors.fold(this) { pub, contextInjector -> contextInjector.injectCoroutineContext(pub, coroutineContext) }
 
 private enum class Mode(val s: String) {
     FIRST("awaitFirst"),
@@ -107,7 +102,7 @@ private suspend fun <T> Publisher<T>.awaitOne(
     mode: Mode,
     default: T? = null
 ): T = suspendCancellableCoroutine { cont ->
-    subscribe(object : Subscriber<T> {
+    injectCoroutineContext(cont.context).subscribe(object : Subscriber<T> {
         private lateinit var subscription: Subscription
         private var value: T? = null
         private var seenValue = false
